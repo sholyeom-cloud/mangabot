@@ -1,22 +1,55 @@
 [
-  ["Smoking Behind the Supermarket with You","Two tired adults, one smoking spot, and a slow-burn love."],
-  ["Futari no Renai Shoka","Bookstore boy meets literary girl. Age gap? Maybe. Chemistry? Definitely."],
-  ["Najica (Salad Days)","Short stories of love and high school/college life in vivid, heartfelt arcs."],
-  ["Missions of Love","Cold junior-higher uses romance 'missions' to reveal feelings. Predictably chaotic."],
-  ["Taishou Otome Otogibanashi","Historical sweetness, retro flair and love letters under moonlight."],
-  ["Otoyomegatari","Brides in Central Asia: politics, tradition and delicate romance."],
-  ["Futari Ashita mo Sorenari ni","Adult couple, real problems, relatable tenderness."],
-  ["Kimi wa Houkago Insomnia","Night-owl romance between two teens who only meet after school."],
-  ["Senryuu Shoujo","Tiny poems, big feelings: a shy girl finds love via haiku humor."],
-  ["Aharen-san wa Hakarenai","Tiny tsundere, big cuteness, embarrassing misunderstandings."],
-  ["Yagate Kimi ni Naru","Yuri slow-burn between shy girls discovering real feelings."],
-  ["Yancha Gal no Anjou-san","Tsundere gal teases nerd. Eventually she can't resist."],
-  ["Namaikizakari.","Tomboy cheerleader vs basketball captain – fiery rivalry, fiery romance."],
-  ["Dengeki Daisy","Protective guy sends secret texts. She sends sass back."],
-  ["Fuufu Ijou, Koibito Miman","Fake-married high school couple. What could go wrong?"],
-  ["Mijuku na Futari de Gozaimasu ga","Married teens struggle to be romantic – awkward and sweet."],
-  ["Neko no Otera no Chion-san","Quiet Buddhist temple girl and guy come together in silent moments."],
-  ["Suki na Ko ga Megane wo Wasureta","Girl forgets glasses. Boy notices, she blushes, you swoon."],
-  ["Fujimura-kun Mates","Bully becomes sweet after confession. Rom-com cliché done right."],
-  ["Rough Sketch Senpai","Accidental nude sketch? Her embarrassment, his compliments."]
+    ("Smoking Behind the Supermarket with You", "Two tired adults, one smoking spot, and a slow‑burn love."),
+    ("Futari no Renai Shoka", "Bookstore boy meets literary girl. Age gap? Maybe. Chemistry? Definitely."),
+    ("Najica (Salad Days)", "Short stories of love and high school/college life in vivid, heartfelt arcs."),
+    ("Missions of Love", "Cold junior‑higher uses romance 'missions' to reveal feelings. Predictably chaotic."),
+    ("Taishou Otome Otogibanashi", "Historical sweetness, retro flair and love letters under moonlight."),
+    ("Otoyomegatari", "Brides in Central Asia: politics, tradition and delicate romance."),
+    ("Futari Ashita mo Sorenari ni", "Adult couple, real problems, relatable tenderness."),
+    ("Kimi wa Houkago Insomnia", "Night‑owl romance between two teens who only meet after school."),
+    ("Senryuu Shoujo", "Tiny poems, big feelings: a shy girl finds love via haiku humor."),
+    ("Aharen‑san wa Hakarenai", "Tiny tsundere, big cuteness, embarrassing misunderstandings."),
+    ("Yagate Kimi ni Naru", "Yuri slow‑burn between shy girls discovering real feelings."),
+    ("Yancha Gal no Anjou‑san", "Tsundere gal teases nerd. Eventually she can't resist."),
+    ("Namaikizakari.", "Tomboy cheerleader vs basketball captain – fiery rivalry, fiery romance."),
+    ("Dengeki Daisy", "Protective guy sends secret texts. She sends sass back."),
+    ("Fuufu Ijou, Koibito Miman", "Fake‑married high school couple. What could go wrong?"),
+    ("Mijuku na Futari de Gozaimasu ga", "Married teens struggle to be romantic – awkward and sweet."),
+    ("Neko no Otera no Chion‑san", "Quiet Buddhist temple girl and guy come together in silent moments."),
+    ("Suki na Ko ga Megane wo Wasureta", "Girl forgets glasses. Boy notices, she blushes, you swoon."),
+    ("Fujimura‑kun Mates", "Bully becomes sweet after confession. Rom‑com cliché done right."),
+    ("Rough Sketch Senpai", "Accidental nude sketch? Her embarrassment, his compliments."),
+    ("Koi wa Sekai Seifuku no Ato de", "Supervillain and idol secretly date. World domination or love?"),
+    ("Jumyou wo Kaitotte Moratta", "She sells lifespan. He wants more. Dark but romantic."),
+    ("Yugami‑kun ni wa Tomodachi ga Inai", "Weird loner boy and popular girl. Friendship becomes more."),
+    ("Tsubaki‑chou Lonely Planet", "Slow‑burn friendships, overseas study, first love."),
+    ("The Last Game", "High‑stakes rivalry in tennis triggers unexpected romance."),  # reddit :contentReference[oaicite:1]{index=1}
+    ("Horimiya", "Normal teens, hidden sides, big chemistry."),  # reddit :contentReference[oaicite:2]{index=2}
+    ("Home Office Romance", "Adult coworkers, WFH chaos and sparks."),  # reddit :contentReference[oaicite:3]{index=3}
+    ("Our Precious Conversations", "Short, sweet commuter romance with big feels."),  # reddit :contentReference[oaicite:4]{index=4}
+    ("The Fragrant Flower Blooms With Dignity", "Elegant modern rom‑com with refined characters."),  # reddit :contentReference[oaicite:5]{index=5}
+    ("You and I Are Polar Opposites", "Opposites attract in high school. Cute plus chemistry."),  # reddit :contentReference[oaicite:6]{index=6}
+    ("The Dangers in My Heart", "Middle‑schooler with dark imagination finds romance nearby."),  # reddit :contentReference[oaicite:7]{index=7}
+    ("Call of the Night", "Vampire romance under neon lights, soft and shadowy."),  # reddit :contentReference[oaicite:8]{index=8}
+    ("Even If You Slit My Mouth", "Supernatural fluff meets forbidden attraction."),  # reddit :contentReference[oaicite:9]{index=9}
+    ("Giji Harem", "Reluctant harem, surprisingly romantic and hilarious."),  # reddit :contentReference[oaicite:10]{index=10}
+    ("Doujima‑kun wa Doujinai", "Gyaru x honor student matchup? Funny and satisfying."),  # reddit :contentReference[oaicite:11]{index=11}
+    ("Blue Box", "Sports romance + basketball + tennis = heart on court."),  # :contentReference[oaicite:12]{index=12}
+    ("Tonikaku Cawaii", "Married-at-first-sight cuteness overload."),  # reddit :contentReference[oaicite:13]{index=13}
+    ("Taishou Otome Otogibanashi", "Again, time‑travel letter charm."),  # reddit :contentReference[oaicite:14]{index=14}
+    ("Taiyou no Ie", "50 chapters of slow slice‑of‑life love."),  # reddit :contentReference[oaicite:15]{index=15}
+    ("Pretty Face", "Boys fall in love with girl who looks like another."),  # reddit :contentReference[oaicite:16]{index=16}
+    ("Hentai Ouji to Warawanai Neko", "Silent, deadpan girl eventually warms up."),  # reddit :contentReference[oaicite:17]{index=17}
+    ("Senryuu Shoujo", "Listed again for consistency – tiny humor, big love."),  # reddit :contentReference[oaicite:18]{index=18}
+    ("Kami-sama Kiss", "God of love messes up temple girl’s life… romantically."),
+    ("Lovely Complex", "Tall girl & short guy battle height stereotypes and find love."),
+    ("Fruits Basket", "Cursed family, deep bonds and shy romance healing all wounds."),
+    ("Kimi ni Todoke", "Misunderstood girl blossoms thanks to gentle boy."),
+    ("ReLIFE", "Second chance at youth. Romance and redemption."),
+    ("Moon on a Rainy Night", "Gentle yuri between adult librarian and woman."),
+    ("Insomniacs After School", "Late‑night school rooftop confession vibes."),
+    ("My Senpai is Annoying", "Office romance with teasing senior and obedient junior."),
+    ("Glasses with a Chance of Delinquent", "Class rep falls for bad boy… who secretly needs her."),
+    ("Honey Lemon Soda", "Shy girl meets sparkling cheer boy. Bright, sugary rom‑com."),
+    ("Koiwazurai no Ellie", "Cutesy, slow branded yuri with café vibes."),
 ]

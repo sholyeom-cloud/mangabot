@@ -49,7 +49,7 @@ CAT_GIF = ASSETS / "cat.gif"
 PLACEHOLDER = ASSETS / "placeholder.jpg"
 FONT_PATH = ASSETS / "fonts" / "Inter-Bold.ttf"  # optional
 
-SERPAPI_KEY = os.getenv("SERPAPI_KEY")  # optional: set as repo secret if you want auto download
+SERPAPI_KEY = os.getenv("SERPAPI_KEY")
 
 TITLES = [
     "Top 5 today's manga (funny picks!)",
@@ -291,20 +291,37 @@ def build_video():
         orig = OUTPUT / f"cover_{idx}_orig.jpg"
         final = OUTPUT / f"cover_{idx}.jpg"
 
+        # Always ensure `orig` exists
         if cover_url:
             ok = download_image(cover_url, orig)
-            if not ok and PLACEHOLDER.exists():
-                shutil.copy(PLACEHOLDER, orig)
+            if not ok:
+                if PLACEHOLDER.exists():
+                    shutil.copy(PLACEHOLDER, orig)
+                else:
+                    im = Image.new("RGB", (WIDTH, HEIGHT), (20, 20, 20))
+                    d = ImageDraw.Draw(im)
+                    d.text((50, 50), title, fill=(255, 255, 255))
+                    im.save(orig)
         else:
             if PLACEHOLDER.exists():
                 shutil.copy(PLACEHOLDER, orig)
             else:
-                im = Image.new("RGB",(720,1024),(20,20,20))
+                im = Image.new("RGB", (WIDTH, HEIGHT), (20, 20, 20))
                 d = ImageDraw.Draw(im)
-                d.text((40,40), title, fill=(255,255,255))
+                d.text((50, 50), title, fill=(255, 255, 255))
                 im.save(orig)
 
-        add_description_overlay_to_image(orig, desc, final, font_path=str(FONT_PATH) if FONT_PATH.exists() else None)
+        # Now orig is guaranteed to exist
+        add_description_overlay_to_image(
+            orig,
+            desc,
+            final,
+            font_path=str(FONT_PATH) if FONT_PATH.exists() else None
+        )
+
+        # Ensure final exists too
+        if not final.exists():
+            shutil.copy(orig, final)
 
         # Resize & crop cover to full TikTok screen
         with Image.open(final) as im:

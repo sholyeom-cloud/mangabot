@@ -2,8 +2,7 @@
 """
 Daily manga top-5 video generator for GitHub Actions.
 Selects 5 unused manga from manga_list.json, generates a vertical video,
-writes updated used.json (not committing here), and exits.
-The workflow will commit used.json after successful run.
+updates used.json, and emails the final video with title, hashtags, and descriptions.
 """
 import os
 import random
@@ -12,6 +11,8 @@ import json
 import shutil
 from datetime import datetime
 from pathlib import Path
+import smtplib
+from email.message import EmailMessage
 
 from gtts import gTTS
 from PIL import Image, ImageDraw, ImageFont
@@ -24,6 +25,7 @@ from moviepy.editor import (
 )
 from moviepy.video.fx.all import loop as clip_loop
 
+# --- Paths ---
 PROJECT = Path(__file__).parent.resolve()
 ASSETS = PROJECT / "assets"
 OUTPUT = PROJECT / "output"
@@ -32,7 +34,7 @@ OUTPUT.mkdir(exist_ok=True)
 MANGA_JSON = PROJECT / "manga_list.json"
 USED_JSON = PROJECT / "used.json"
 
-# Config
+# --- Config ---
 WIDTH = 1080
 HEIGHT = 1920
 FPS = 30
@@ -46,9 +48,8 @@ CAT_GIF = ASSETS / "cat.gif"
 PLACEHOLDER = ASSETS / "placeholder.jpg"
 FONT_PATH = ASSETS / "fonts" / "Inter-Bold.ttf"  # optional
 
-SERPAPI_KEY = os.getenv("SERPAPI_KEY")  # optional: set as repo secret if you want auto download
+SERPAPI_KEY = os.getenv("SERPAPI_KEY")  # optional for image search
 
-# small title choices
 TITLES = [
     "Top 5 today's manga (funny picks!)",
     "Today's top 5 manga you need to read",
@@ -57,6 +58,7 @@ TITLES = [
 
 TAGS = "#manga #recommendation #anime"
 
+# --- JSON helpers ---
 def read_json(p: Path):
     if not p.exists():
         return None
@@ -67,6 +69,7 @@ def write_json(p: Path, data):
     with open(p, "w", encoding="utf-8") as f:
         json.dump(data, f, ensure_ascii=False, indent=2)
 
+# --- Manga selection ---
 def get_unused_items():
     manga = read_json(MANGA_JSON) or []
     used = read_json(USED_JSON) or []
@@ -74,12 +77,19 @@ def get_unused_items():
     remaining = [m for m in manga if m[0] not in used_set]
     return manga, used, remaining
 
+# --- Image download via SerpAPI ---
 def search_manga_image_serpapi(title: str):
     if not SERPAPI_KEY:
         return None
     try:
         url = "https://serpapi.com/search.json"
-        params = {"engine": "google", "q": f"{title} manga cover", "tbm": "isch", "api_key": SERPAPI_KEY, "num": 1}
+        params = {
+            "engine": "google",
+            "q": f"{title} manga cover",
+            "tbm": "isch",
+            "api_key": SERPAPI_KEY,
+            "num": 1
+        }
         r = requests.get(url, params=params, timeout=15)
         r.raise_for_status()
         js = r.json()
@@ -104,6 +114,7 @@ def download_image(url: str, dest: Path) -> bool:
         print("[!] Download failed:", e)
         return False
 
+# --- Text images ---
 def make_text_image_fullscreen(text: str, width=WIDTH, height=HEIGHT, font_path=None, font_size=64, bg_color=(10,10,10)):
     img = Image.new("RGB", (width, height), color=bg_color)
     draw = ImageDraw.Draw(img)
@@ -176,6 +187,7 @@ def add_description_overlay_to_image(src: Path, description: str, out: Path, fon
     image.convert("RGB").save(out, quality=90)
     return True
 
+# --- TTS ---
 def generate_tts(text: str, out: Path, lang="en"):
     try:
         tts = gTTS(text=text, lang=lang)
@@ -185,10 +197,10 @@ def generate_tts(text: str, out: Path, lang="en"):
         print("[!] TTS error:", e)
         return False
 
+# --- Build video ---
 def build_video():
     manga, used, remaining = get_unused_items()
     if len(remaining) < NUM_RECS:
-        # reset used if not enough left
         print("[*] Not enough remaining -> resetting used list.")
         used = []
         remaining = manga
@@ -201,7 +213,8 @@ def build_video():
     out_file = OUTPUT / f"daily_{ts}.mp4"
 
     total_dur = TITLE_DURATION + len(selected)*PER_ITEM_DURATION + OUTRO_DURATION
-    # Prepare background
+
+    # Background
     if MINECRAFT_BG.exists():
         bg = VideoFileClip(str(MINECRAFT_BG))
         bg = clip_loop(bg, duration=total_dur)
@@ -301,7 +314,6 @@ def build_video():
     # update used.json (append selected titles)
     used_new = read_json(USED_JSON) or []
     used_new.extend([t for t,_ in selected])
-    # make unique while preserving order
     seen = set(); uniq = []
     for u in used_new:
         if u not in seen:
@@ -311,7 +323,40 @@ def build_video():
     # meta file
     meta = {"timestamp": ts, "slides": slide_meta, "title": title_text, "output": str(out_file)}
     write_json(OUTPUT / f"meta_{ts}.json", meta)
-    return out_file
+    return out_file, meta
 
+# --- Email sending ---
+def send_email(video_path: Path, title: str, slides: list):
+    EMAIL_SENDER = os.getenv("GMAIL_USER")
+    EMAIL_APP_PASSWORD = os.getenv("GMAIL_APP_PASS")
+    EMAIL_RECEIVER = os.getenv("EMAIL_TO")
+
+    if not all([EMAIL_SENDER, EMAIL_APP_PASSWORD, EMAIL_RECEIVER]):
+        print("[!] Missing Gmail environment variables. Skipping email.")
+        return
+
+    msg = EmailMessage()
+    msg["Subject"] = title
+    msg["From"] = EMAIL_SENDER
+    msg["To"] = EMAIL_RECEIVER
+
+    body = title + "\n" + TAGS + "\n\n"
+    for s in slides:
+        body += f"{s['title']}: {s['desc']}\n"
+    msg.set_content(body)
+
+    with open(video_path, "rb") as f:
+        msg.add_attachment(f.read(), maintype="video", subtype="mp4", filename=video_path.name)
+
+    try:
+        with smtplib.SMTP_SSL("smtp.gmail.com", 465) as smtp:
+            smtp.login(EMAIL_SENDER, EMAIL_APP_PASSWORD)
+            smtp.send_message(msg)
+        print("[+] Email sent successfully!")
+    except Exception as e:
+        print("[!] Email sending failed:", e)
+
+# --- Main ---
 if __name__ == "__main__":
-    build_video()
+    video_path, meta = build_video()
+    send_email(Path(meta["output"]), meta["title"], meta["slides"])

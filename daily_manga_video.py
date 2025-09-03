@@ -2,7 +2,8 @@
 """
 Daily manga top-5 video generator for GitHub Actions.
 Selects 5 unused manga from manga_list.json, generates a vertical video,
-updates used.json, and emails the final video with title, hashtags, and descriptions.
+writes updated used.json (not committing here), and exits.
+The workflow will commit used.json after successful run.
 """
 import os
 import random
@@ -25,7 +26,6 @@ from moviepy.editor import (
 )
 from moviepy.video.fx.all import loop as clip_loop
 
-# --- Paths ---
 PROJECT = Path(__file__).parent.resolve()
 ASSETS = PROJECT / "assets"
 OUTPUT = PROJECT / "output"
@@ -34,7 +34,7 @@ OUTPUT.mkdir(exist_ok=True)
 MANGA_JSON = PROJECT / "manga_list.json"
 USED_JSON = PROJECT / "used.json"
 
-# --- Config ---
+# Config
 WIDTH = 1080
 HEIGHT = 1920
 FPS = 30
@@ -48,8 +48,9 @@ CAT_GIF = ASSETS / "cat.gif"
 PLACEHOLDER = ASSETS / "placeholder.jpg"
 FONT_PATH = ASSETS / "fonts" / "Inter-Bold.ttf"  # optional
 
-SERPAPI_KEY = os.getenv("SERPAPI_KEY")  # optional for image search
+SERPAPI_KEY = os.getenv("SERPAPI_KEY")  # optional: set as repo secret if you want auto download
 
+# small title choices
 TITLES = [
     "Top 5 today's manga (funny picks!)",
     "Today's top 5 manga you need to read",
@@ -69,7 +70,6 @@ def write_json(p: Path, data):
     with open(p, "w", encoding="utf-8") as f:
         json.dump(data, f, ensure_ascii=False, indent=2)
 
-# --- Manga selection ---
 def get_unused_items():
     manga = read_json(MANGA_JSON) or []
     used = read_json(USED_JSON) or []
@@ -77,19 +77,13 @@ def get_unused_items():
     remaining = [m for m in manga if m[0] not in used_set]
     return manga, used, remaining
 
-# --- Image download via SerpAPI ---
+# --- Image helpers ---
 def search_manga_image_serpapi(title: str):
     if not SERPAPI_KEY:
         return None
     try:
         url = "https://serpapi.com/search.json"
-        params = {
-            "engine": "google",
-            "q": f"{title} manga cover",
-            "tbm": "isch",
-            "api_key": SERPAPI_KEY,
-            "num": 1
-        }
+        params = {"engine": "google", "q": f"{title} manga cover", "tbm": "isch", "api_key": SERPAPI_KEY, "num": 1}
         r = requests.get(url, params=params, timeout=15)
         r.raise_for_status()
         js = r.json()
@@ -114,7 +108,6 @@ def download_image(url: str, dest: Path) -> bool:
         print("[!] Download failed:", e)
         return False
 
-# --- Text images ---
 def make_text_image_fullscreen(text: str, width=WIDTH, height=HEIGHT, font_path=None, font_size=64, bg_color=(10,10,10)):
     img = Image.new("RGB", (width, height), color=bg_color)
     draw = ImageDraw.Draw(img)
@@ -122,6 +115,7 @@ def make_text_image_fullscreen(text: str, width=WIDTH, height=HEIGHT, font_path=
         font = ImageFont.truetype(str(font_path), font_size) if font_path and Path(font_path).exists() else ImageFont.load_default()
     except Exception:
         font = ImageFont.load_default()
+    
     words = text.split()
     lines = []
     cur = ""
@@ -135,15 +129,20 @@ def make_text_image_fullscreen(text: str, width=WIDTH, height=HEIGHT, font_path=
             if cur: lines.append(cur)
             cur = w
     if cur: lines.append(cur)
+
+    # get line height
     _, _, _, line_h = draw.textbbox((0,0), "Ay", font=font)
     total_h = len(lines)*(line_h+8)
     y = (height-total_h)//2
+
     for line in lines:
-        w0,h0 = draw.textsize(line, font=font)
+        bbox = draw.textbbox((0,0), line, font=font)
+        w0 = bbox[2] - bbox[0]
         x = (width - w0)//2
         draw.text((x+2,y+2), line, font=font, fill=(0,0,0))
         draw.text((x,y), line, font=font, fill=(255,255,255))
-        y += line_h+8
+        y += line_h + 8
+
     return img
 
 def add_description_overlay_to_image(src: Path, description: str, out: Path, font_path=None):
@@ -187,7 +186,6 @@ def add_description_overlay_to_image(src: Path, description: str, out: Path, fon
     image.convert("RGB").save(out, quality=90)
     return True
 
-# --- TTS ---
 def generate_tts(text: str, out: Path, lang="en"):
     try:
         tts = gTTS(text=text, lang=lang)
@@ -197,7 +195,7 @@ def generate_tts(text: str, out: Path, lang="en"):
         print("[!] TTS error:", e)
         return False
 
-# --- Build video ---
+# --- Video builder ---
 def build_video():
     manga, used, remaining = get_unused_items()
     if len(remaining) < NUM_RECS:
@@ -213,8 +211,7 @@ def build_video():
     out_file = OUTPUT / f"daily_{ts}.mp4"
 
     total_dur = TITLE_DURATION + len(selected)*PER_ITEM_DURATION + OUTRO_DURATION
-
-    # Background
+    # Prepare background
     if MINECRAFT_BG.exists():
         bg = VideoFileClip(str(MINECRAFT_BG))
         bg = clip_loop(bg, duration=total_dur)
@@ -360,3 +357,4 @@ def send_email(video_path: Path, title: str, slides: list):
 if __name__ == "__main__":
     video_path, meta = build_video()
     send_email(Path(meta["output"]), meta["title"], meta["slides"])
+

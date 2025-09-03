@@ -1,6 +1,13 @@
 # daily_manga_video.py
+"""
+Daily manga top-5 video generator for GitHub Actions.
+Generates vertical video with title, manga slides, outro, and sends email.
+Tracks used manga in used.json to avoid repeats.
+"""
+
 import os
 import random
+import requests
 import json
 import shutil
 import smtplib
@@ -11,11 +18,16 @@ from pathlib import Path
 from gtts import gTTS
 from PIL import Image, ImageDraw, ImageFont
 from moviepy.editor import (
-    VideoFileClip, ImageClip, CompositeVideoClip,
-    concatenate_videoclips, AudioFileClip, ColorClip
+    VideoFileClip,
+    ImageClip,
+    CompositeVideoClip,
+    concatenate_videoclips,
+    AudioFileClip,
+    ColorClip,
 )
 from moviepy.video.fx.all import loop as clip_loop
 
+# ----------------- CONFIG -----------------
 PROJECT = Path(__file__).parent.resolve()
 ASSETS = PROJECT / "assets"
 OUTPUT = PROJECT / "output"
@@ -32,100 +44,198 @@ PER_ITEM_DURATION = 4.5
 OUTRO_DURATION = 3.0
 NUM_RECS = 5
 
+MINECRAFT_BG = ASSETS / "minecraft.mp4"
+CAT_GIF = ASSETS / "cat.gif"
 PLACEHOLDER = ASSETS / "placeholder.jpg"
-FONT_PATH = ASSETS / "fonts" / "Inter-Bold.ttf"
+FONT_PATH = ASSETS / "fonts" / "Inter-Bold.ttf"  # optional
+
+SERPAPI_KEY = os.getenv("SERPAPI_KEY")  # optional: set as repo secret if you want auto download
 
 TITLES = [
-    "Top 5 Today's Manga (Funny Picks!)",
-    "Today's Top 5 Manga You Need to Read",
-    "Five Manga That Ruined My Sleep 😹"
+    "Top 5 today's manga (funny picks!)",
+    "Today's top 5 manga you need to read",
+    "Five manga that ruined my sleep 😹",
 ]
+
 TAGS = "#manga #recommendation #anime"
 
-GMAIL_USER = os.getenv("GMAIL_USER")
-GMAIL_PASS = os.getenv("GMAIL_APP_PASSWORD")
-TO_EMAIL = os.getenv("TO_EMAIL")
+EMAIL_SENDER = os.getenv("EMAIL_SENDER")
+EMAIL_PASSWORD = os.getenv("EMAIL_PASSWORD")
+EMAIL_RECEIVER = os.getenv("EMAIL_RECEIVER")
 
-# ------------------- Helpers -------------------
+# ----------------- FUNCTIONS -----------------
 def read_json(p: Path):
     if not p.exists():
-        return []
+        return None
     with open(p, "r", encoding="utf-8") as f:
-        try:
-            return json.load(f)
-        except json.JSONDecodeError:
-            return []
+        return json.load(f)
 
 def write_json(p: Path, data):
     with open(p, "w", encoding="utf-8") as f:
         json.dump(data, f, ensure_ascii=False, indent=2)
 
 def get_unused_items():
-    manga = read_json(MANGA_JSON)
-    used = read_json(USED_JSON)
+    manga = read_json(MANGA_JSON) or []
+    used = read_json(USED_JSON) or []
     used_set = set(used)
     remaining = [m for m in manga if m[0] not in used_set]
     return manga, used, remaining
 
-def make_text_image_fullscreen(text: str, width=WIDTH, height=HEIGHT, font_path=None, font_size=120, bg_color=(10,10,10)):
+def search_manga_image_serpapi(title: str):
+    if not SERPAPI_KEY:
+        return None
+    try:
+        url = "https://serpapi.com/search.json"
+        params = {"engine": "google", "q": f"{title} manga cover", "tbm": "isch", "api_key": SERPAPI_KEY, "num": 1}
+        r = requests.get(url, params=params, timeout=15)
+        r.raise_for_status()
+        js = r.json()
+        imgs = js.get("images_results") or js.get("images")
+        if imgs and len(imgs) > 0:
+            img = imgs[0]
+            return img.get("original") or img.get("thumbnail")
+    except Exception as e:
+        print("[!] SerpAPI error:", e)
+    return None
+
+def download_image(url: str, dest: Path) -> bool:
+    try:
+        r = requests.get(url, stream=True, timeout=20)
+        r.raise_for_status()
+        with open(dest, "wb") as f:
+            for chunk in r.iter_content(8192):
+                if chunk:
+                    f.write(chunk)
+        return True
+    except Exception as e:
+        print("[!] Download failed:", e)
+        return False
+
+def make_text_image_fullscreen(text: str, width=WIDTH, height=HEIGHT, font_path=None, font_size=96, bg_color=(10,10,10)):
+    """Generate fullscreen text image with larger, centered text for TikTok format."""
     img = Image.new("RGB", (width, height), color=bg_color)
     draw = ImageDraw.Draw(img)
     try:
         font = ImageFont.truetype(str(font_path), font_size) if font_path and Path(font_path).exists() else ImageFont.load_default()
-    except:
+    except Exception:
         font = ImageFont.load_default()
 
     words = text.split()
-    lines = []
-    cur = ""
-    max_w = int(width * 0.85)
+    lines, cur = [], ""
+    max_w = int(width * 0.9)
     for w in words:
         test = (cur + " " + w).strip()
-        bbox = draw.textbbox((0,0), test, font=font)
-        if bbox[2]-bbox[0] <= max_w:
+        bbox = draw.textbbox((0, 0), test, font=font)
+        if bbox[2] - bbox[0] <= max_w:
             cur = test
         else:
-            if cur: lines.append(cur)
+            if cur:
+                lines.append(cur)
             cur = w
-    if cur: lines.append(cur)
+    if cur:
+        lines.append(cur)
 
-    _, _, _, line_h = draw.textbbox((0,0), "Ay", font=font)
-    total_h = len(lines)*(line_h+10)
-    y = (height-total_h)//2
+    _, _, _, line_h = draw.textbbox((0, 0), "Ay", font=font)
+    total_h = len(lines) * (line_h + 12)
+    y = (height - total_h) // 2
+
     for line in lines:
-        w0,h0 = draw.textbbox((0,0), line, font=font)[2:4]
-        x = (width - w0)//2
-        draw.text((x+2,y+2), line, font=font, fill=(0,0,0))
-        draw.text((x,y), line, font=font, fill=(255,255,255))
-        y += line_h + 10
+        bbox = draw.textbbox((0, 0), line, font=font)
+        w0 = bbox[2] - bbox[0]
+        # shadow + white text
+        draw.text(((width - w0) // 2 + 4, y + 4), line, font=font, fill=(0, 0, 0))
+        draw.text(((width - w0) // 2, y), line, font=font, fill=(255, 255, 255))
+        y += line_h + 12
+
     return img
 
-def generate_tts(text: str, out: Path):
-    tts = gTTS(text=text, lang="en")
-    tts.save(str(out))
+def add_description_overlay_to_image(src: Path, description: str, out: Path, font_path=None):
+    """Overlay description text with readability box for TikTok format."""
+    try:
+        image = Image.open(src).convert("RGBA")
+    except Exception as e:
+        print("[!] open error:", e)
+        return False
 
-def send_email_with_attachment(subject, body, attachment_path):
-    if not GMAIL_USER or not GMAIL_PASS or not TO_EMAIL:
-        print("[!] Gmail env variables missing")
+    draw = ImageDraw.Draw(image)
+    w, h = image.size
+    try:
+        font = ImageFont.truetype(str(font_path), max(32, w // 14)) if font_path and Path(font_path).exists() else ImageFont.load_default()
+    except Exception:
+        font = ImageFont.load_default()
+
+    max_w = int(w * 0.85)
+    words = description.split()
+    lines, cur = [], ""
+    for wd in words:
+        test = (cur + " " + wd).strip()
+        bbox = draw.textbbox((0, 0), test, font=font)
+        if bbox[2] - bbox[0] <= max_w:
+            cur = test
+        else:
+            if cur:
+                lines.append(cur)
+            cur = wd
+    if cur:
+        lines.append(cur)
+
+    _, _, _, lh = draw.textbbox((0, 0), "Ay", font=font)
+    total_h = len(lines) * (lh + 10)
+    box_h = total_h + 60
+    box_w = max([draw.textbbox((0, 0), l, font=font)[2] for l in lines]) + 60
+
+    bx0 = (w - box_w) // 2
+    by0 = h - box_h - 100
+    bx1 = bx0 + box_w
+    by1 = by0 + box_h
+
+    overlay = Image.new("RGBA", image.size, (0, 0, 0, 0))
+    ovd = ImageDraw.Draw(overlay)
+    ovd.rectangle([bx0, by0, bx1, by1], fill=(0, 0, 0, 190))
+    image = Image.alpha_composite(image, overlay)
+
+    draw = ImageDraw.Draw(image)
+    tx, ty = bx0 + 30, by0 + 30
+    for l in lines:
+        draw.text((tx + 2, ty + 2), l, font=font, fill=(0, 0, 0, 255))
+        draw.text((tx, ty), l, font=font, fill=(255, 255, 255, 255))
+        ty += lh + 10
+
+    image.convert("RGB").save(out, quality=95)
+    return True
+
+def generate_tts(text: str, out: Path, lang="en"):
+    try:
+        tts = gTTS(text=text, lang=lang)
+        tts.save(str(out))
+        return True
+    except Exception as e:
+        print("[!] TTS error:", e)
+        return False
+
+def send_email(video_path: Path, slide_meta, title_text: str):
+    if not EMAIL_SENDER or not EMAIL_PASSWORD or not EMAIL_RECEIVER:
+        print("[!] Email credentials not set, skipping email")
         return
+    try:
+        msg = EmailMessage()
+        msg["Subject"] = title_text
+        msg["From"] = EMAIL_SENDER
+        msg["To"] = EMAIL_RECEIVER
+        body = title_text + "\n" + TAGS + "\n\n"
+        for slide in slide_meta:
+            body += f"{slide['title']}: {slide['desc']}\n"
+        msg.set_content(body)
+        with open(video_path, "rb") as f:
+            msg.add_attachment(f.read(), maintype="video", subtype="mp4", filename=video_path.name)
+        with smtplib.SMTP_SSL("smtp.gmail.com", 465) as smtp:
+            smtp.login(EMAIL_SENDER, EMAIL_PASSWORD)
+            smtp.send_message(msg)
+        print("[+] Email sent successfully.")
+    except Exception as e:
+        print("[!] Email sending failed:", e)
 
-    msg = EmailMessage()
-    msg['Subject'] = subject
-    msg['From'] = GMAIL_USER
-    msg['To'] = TO_EMAIL
-    msg.set_content(body)
-
-    with open(attachment_path, 'rb') as f:
-        file_data = f.read()
-        file_name = attachment_path.name
-    msg.add_attachment(file_data, maintype='video', subtype='mp4', filename=file_name)
-
-    with smtplib.SMTP_SSL('smtp.gmail.com', 465) as smtp:
-        smtp.login(GMAIL_USER, GMAIL_PASS)
-        smtp.send_message(msg)
-        print(f"[+] Email sent to {TO_EMAIL}")
-
-# ------------------- Video Builder -------------------
+# ----------------- BUILD VIDEO -----------------
 def build_video():
     manga, used, remaining = get_unused_items()
     if len(remaining) < NUM_RECS:
@@ -134,61 +244,132 @@ def build_video():
 
     selected = random.sample(remaining, k=NUM_RECS)
     print("[*] Selected:", [s[0] for s in selected])
+
     ts = datetime.utcnow().strftime("%Y-%m-%d")
     out_file = OUTPUT / f"daily_{ts}.mp4"
+    total_dur = TITLE_DURATION + len(selected)*PER_ITEM_DURATION + OUTRO_DURATION
+
+    # Background
+    if MINECRAFT_BG.exists():
+        bg = VideoFileClip(str(MINECRAFT_BG))
+        bg = clip_loop(bg, duration=total_dur)
+        bg = bg.resize(height=HEIGHT)
+        if bg.w < WIDTH: bg = bg.resize(width=WIDTH)
+        try: bg = bg.crop(x_center=bg.w/2, y_center=bg.h/2, width=WIDTH, height=HEIGHT)
+        except Exception: pass
+    else:
+        bg = ColorClip(size=(WIDTH,HEIGHT), color=(10,10,10), duration=total_dur)
+
+    # Cat GIF
+    cat_clip = None
+    if CAT_GIF.exists():
+        cat_clip_raw = VideoFileClip(str(CAT_GIF))
+        cat_clip = clip_loop(cat_clip_raw, duration=total_dur)
+        cat_clip = cat_clip.resize(width=int(WIDTH*0.28)).set_position(("center", int(HEIGHT*0.74)))
 
     clips = []
-    # Title
+
+    # ----------------- Title Screen -----------------
     title_text = random.choice(TITLES)
-    title_img = make_text_image_fullscreen(title_text)
+    title_img = make_text_image_fullscreen(title_text, font_path=str(FONT_PATH) if FONT_PATH.exists() else None)
     tmp_title = OUTPUT / "title.jpg"
     title_img.save(tmp_title)
-    img_clip = ImageClip(str(tmp_title)).set_duration(TITLE_DURATION).resize((WIDTH, HEIGHT))
+    bg_sub = bg.subclip(0, TITLE_DURATION)
+    img_clip = ImageClip(str(tmp_title)).set_duration(TITLE_DURATION).set_position(("center","center"))
     tts_title = OUTPUT / "tts_title.mp3"
     generate_tts(title_text, tts_title)
-    if tts_title.exists(): img_clip = img_clip.set_audio(AudioFileClip(str(tts_title)))
-    clips.append(img_clip)
+    comp = CompositeVideoClip([bg_sub, img_clip] + ([cat_clip.subclip(0,TITLE_DURATION)] if cat_clip else []), size=(WIDTH,HEIGHT)).set_duration(TITLE_DURATION)
+    if tts_title.exists(): comp = comp.set_audio(AudioFileClip(str(tts_title)))
+    clips.append(comp)
 
-    # Manga slides
+    cursor = TITLE_DURATION
+    slide_meta = []
     idx = 1
     for title, desc in selected:
-        # Cover image fallback
-        cover_path = PLACEHOLDER if not PLACEHOLDER.exists() else PLACEHOLDER
-        slide_img = make_text_image_fullscreen(f"{title}\n\n{desc}", font_size=80)
-        slide_path = OUTPUT / f"slide_{idx}.jpg"
-        slide_img.save(slide_path)
+        print("[*] Processing:", title)
+        cover_url = search_manga_image_serpapi(title)
+        orig = OUTPUT / f"cover_{idx}_orig.jpg"
+        final = OUTPUT / f"cover_{idx}.jpg"
+
+        if cover_url:
+            ok = download_image(cover_url, orig)
+            if not ok and PLACEHOLDER.exists():
+                shutil.copy(PLACEHOLDER, orig)
+        else:
+            if PLACEHOLDER.exists():
+                shutil.copy(PLACEHOLDER, orig)
+            else:
+                im = Image.new("RGB",(720,1024),(20,20,20))
+                d = ImageDraw.Draw(im)
+                d.text((40,40), title, fill=(255,255,255))
+                im.save(orig)
+
+        add_description_overlay_to_image(orig, desc, final, font_path=str(FONT_PATH) if FONT_PATH.exists() else None)
+
+        # Resize & crop cover to full TikTok screen
+        with Image.open(final) as im:
+            im = im.resize((WIDTH, HEIGHT), resample=Image.Resampling.LANCZOS)
+            im.save(final)
+
         tts_path = OUTPUT / f"tts_{idx}.mp3"
         generate_tts(f"{title}. {desc}", tts_path)
 
-        clip = ImageClip(str(slide_path)).set_duration(PER_ITEM_DURATION).resize((WIDTH, HEIGHT))
-        if tts_path.exists(): clip = clip.set_audio(AudioFileClip(str(tts_path)))
-        clips.append(clip)
+        start = cursor
+        end = cursor + PER_ITEM_DURATION
+        bg_sub = bg.subclip(start, end)
+        img_clip = ImageClip(str(final)).set_duration(PER_ITEM_DURATION).set_position(("center","center"))
+        comps = [bg_sub, img_clip]
+        if cat_clip: comps.append(cat_clip.subclip(start,end))
+        composed = CompositeVideoClip(comps, size=(WIDTH,HEIGHT)).set_duration(PER_ITEM_DURATION)
+        if tts_path.exists(): composed = composed.set_audio(AudioFileClip(str(tts_path)))
+        clips.append(composed)
+
+        slide_meta.append({"title": title, "desc": desc, "img": str(final)})
+        cursor += PER_ITEM_DURATION
         idx += 1
 
-    # Outro
-    outro_text = "If you watched till the end, hit follow for more recs!"
-    outro_img = make_text_image_fullscreen(outro_text)
+    # ----------------- Outro -----------------
+    outro_text = "If you watched til the end, hit follow for more recs!"
+    outro_img = make_text_image_fullscreen(outro_text, font_path=str(FONT_PATH) if FONT_PATH.exists() else None, font_size=80)
     outro_path = OUTPUT / "outro.jpg"
     outro_img.save(outro_path)
     tts_out = OUTPUT / "tts_outro.mp3"
     generate_tts(outro_text, tts_out)
-    outro_clip = ImageClip(str(outro_path)).set_duration(OUTRO_DURATION).resize((WIDTH, HEIGHT))
-    if tts_out.exists(): outro_clip = outro_clip.set_audio(AudioFileClip(str(tts_out)))
-    clips.append(outro_clip)
 
-    final = concatenate_videoclips(clips, method="compose")
-    final.write_videofile(str(out_file), fps=FPS, codec="libx264", audio_codec="aac", threads=2, preset="medium", bitrate="4500k")
-    print("[+] Video created:", out_file)
+    start = cursor
+    end = cursor + OUTRO_DURATION
+    bg_sub = bg.subclip(start,end)
+    out_img_clip = ImageClip(str(outro_path)).set_duration(OUTRO_DURATION).set_position(("center","center"))
+    comps = [bg_sub, out_img_clip] + ([cat_clip.subclip(start,end)] if cat_clip else [])
+    composed = CompositeVideoClip(comps, size=(WIDTH,HEIGHT)).set_duration(OUTRO_DURATION)
+    if tts_out.exists(): composed = composed.set_audio(AudioFileClip(str(tts_out)))
+    clips.append(composed)
+
+    final_video = concatenate_videoclips(clips, method="compose")
+    print("[*] Writing final video ...")
+    final_video.write_videofile(str(out_file), fps=FPS, codec="libx264", audio_codec="aac", threads=2, preset="medium", bitrate="4500k")
+    print("[+] Video written:", out_file)
 
     # Update used.json
     used_new = read_json(USED_JSON) or []
     used_new.extend([t for t,_ in selected])
-    write_json(USED_JSON, list(dict.fromkeys(used_new)))
+    seen = set(); uniq = []
+    for u in used_new:
+        if u not in seen:
+            seen.add(u)
+            uniq.append(u)
+    write_json(USED_JSON, uniq)
+
+    # Save meta
+    meta = {"timestamp": ts, "slides": slide_meta, "title": title_text, "output": str(out_file)}
+    write_json(OUTPUT / f"meta_{ts}.json", meta)
 
     # Send email
-    send_email_with_attachment(f"Daily Manga Video {ts}", "Here's your daily manga video!", out_file)
+    send_email(out_file, slide_meta, title_text)
 
-    return out_file
+    return out_file, meta
 
+# ----------------- MAIN -----------------
 if __name__ == "__main__":
     build_video()
+
